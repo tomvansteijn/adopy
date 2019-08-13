@@ -12,4 +12,6 @@
 *.sbx filter=lfs diff=lfs merge=lfs -text
 *.shp filter=lfs diff=lfs merge=lfs -text
 *.shx filter=lfs diff=lfs merge=lfs -text
-
+*.ado filter=lfs diff=lfs merge=lfs -text
+*.flo filter=lfs diff=lfs merge=lfs -text
+*.teo filter=lfs diff=lfs merge=lfs -text
