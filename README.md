@@ -9,6 +9,7 @@ Supported functionality:
 
 To Do:
 * Writing ado files
+* Reading trace tro files
 
 The following projects are similar:
 * [triwaco_flo](https://gitlab.com/rhdhv/water/groundwater/io/tree/master/triwaco_flo)
