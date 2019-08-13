@@ -7,7 +7,6 @@ import numpy as np
 from pathlib import Path
 from enum import Enum
 import logging
-import io
 import os
 import re
 
@@ -146,7 +145,7 @@ class AdoFileReader(object):
             else:
                 count = nvalues % ncols
             row = np.array(
-                [(line[ic * width: (ic + 1) * width]) for ic in range(count)],
+                [line[ic * width: (ic + 1) * width] for ic in range(count)],
                 dtype=dtype,
                 )
             rows.append(row)
