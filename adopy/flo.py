@@ -50,7 +50,7 @@ class TransientFloFileReader(AdoFileReader):
         block = super().read_block()
 
         # extract time from block name
-        name, timestr = block.name.split(',')
+        block.name, timestr = block.name.split(',')
         time = float(timestr.replace('TIME: ', ''))
 
         # return transient ado block
