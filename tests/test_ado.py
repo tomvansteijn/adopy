@@ -20,7 +20,7 @@ def adofile(tmpdir):
     return testfile
 
 
-class TestAdofile(object):
+class TestAdoFile(object):
     def test_read(self, adofile):
         with adopy.open(adofile) as src:
             blocks = src.read()

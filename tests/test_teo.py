@@ -20,7 +20,7 @@ def teofile(tmpdir):
     return testfile
 
 
-class TestTeofile(object):
+class TestTeoFile(object):
     def test_read(self, teofile):
         with adopy.open_grid(teofile) as src:
             grid = src.read()
