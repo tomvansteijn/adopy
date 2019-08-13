@@ -3,9 +3,7 @@
 # Tom van Steijn, Royal HaskoningDHV
 
 from adopy.ado import AdoFileReader
-import numpy as np
 
-from pathlib import Path
 import logging
 import os
 
@@ -68,9 +66,6 @@ class TeoGrid(object):
 
 
 class TeoFileReader(AdoFileReader):
-    def __init__(self, filepath, mode='r'):
-        super().__init__(filepath, mode)
-
     def read(self):
         header = self._read_header()
         blocks = super().read()

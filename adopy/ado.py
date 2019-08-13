@@ -7,6 +7,7 @@ import numpy as np
 from pathlib import Path
 from enum import Enum
 import logging
+import io
 import os
 import re
 
@@ -70,6 +71,9 @@ class AdoFileReader(object):
                 break
             blocks.append(block)
         return blocks
+
+    def as_dict(self):
+        return {bl.name: bl for bl in self.read()}
 
     def read_block(self):
         # parse ado block name
@@ -135,13 +139,16 @@ class AdoFileReader(object):
         # read array values
         nlines = (nvalues + ncols - 1) // ncols
         rows = []
-        for i in range(nlines):
+        for iline in range(nlines):
             line = next(self.lines)
-            if dtype == np.str:
-                items = line.split()
-                row = np.array(items, dtype=dtype)
+            if (iline + 1) < nlines:
+                count = ncols
             else:
-                row = np.fromstring(line, sep=' ', dtype=dtype)
+                count = nvalues % ncols
+            row = np.array(
+                [(line[ic * width: (ic + 1) * width]) for ic in range(count)],
+                dtype=dtype,
+                )
             rows.append(row)
         values = np.concatenate(rows, axis=0)
         return values
