@@ -13,14 +13,14 @@ log = logging.getLogger(os.path.basename(__file__))
 class SteadyFloFileReader(AdoFileReader):
     def read(self, clean_names=True):
         self._skip_header()
-        blocks = super().read()
-        if clean_names:
-            for block in blocks:
+        blocks = super().read()        
+        for block in blocks:
+            if clean_names:
                 block.name = (block.name
                     .replace(', STEADY-STATE==', '')
                     .strip()
                     )
-        return blocks
+            yield block
 
     def as_dict(self, clean_names=True):
         return {bl.name: bl for bl in self.read(clean_names=clean_names)}

@@ -62,14 +62,15 @@ class AdoFileReader(object):
         if self.mode == 'w':
             raise ValueError('File not readable in write mode')
 
-        blocks = []
+        # reset file position
+        self.f.seek(0)
+
         while True:
             try:
                 block = self.read_block()
+                yield block
             except StopIteration:
                 break
-            blocks.append(block)
-        return blocks
 
     def as_dict(self):
         return {bl.name: bl for bl in self.read()}

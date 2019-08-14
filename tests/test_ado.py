@@ -23,7 +23,7 @@ def adofile(tmpdir):
 class TestAdoFile(object):
     def test_read(self, adofile):
         with adopy.open(adofile) as src:
-            blocks = src.read()
+            blocks = [bl for bl in src.read()]
         block = blocks[0]
         assert block.name == 'RL1'
         assert block.blocktype.value == 2
