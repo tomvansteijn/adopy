@@ -28,6 +28,21 @@ class AdoBlock(object):
         self.blocktype = blocktype
         self.values = values
 
+    @classmethod
+    def from_record(cls, record):
+        return cls(
+            name=record['name'],
+            blocktype=BlockType(record['blocktype']),
+            values=record['values'],
+            )
+
+    def to_record(self):
+        return {
+            'name': self.name,
+            'blocktype': self.blocktype.value,
+            'values': self.values,
+            }
+
 
 class AdoFileReader(object):
     def __init__(self, filepath, mode='r'):
@@ -62,9 +77,6 @@ class AdoFileReader(object):
         if self.mode == 'w':
             raise ValueError('File not readable in write mode')
 
-        # reset file position
-        self.f.seek(0)
-
         while True:
             try:
                 block = self.read_block()
@@ -76,7 +88,7 @@ class AdoFileReader(object):
         return {bl.name: bl for bl in self.read()}
 
     def read_block(self):
-        # parse ado block name
+        # parse block name
         name = self._read_name()
 
         # parse block type
@@ -87,6 +99,10 @@ class AdoFileReader(object):
             values = self._read_scalar()            
         elif blocktype is BlockType.ARRAY:
             values = self._read_array()
+        else:
+            raise ValueError('block type {blocktype:d} not implemented'.format(
+                blocktype=blocktype.value,
+                ))
 
         # read endset
         self._read_endset()
@@ -98,6 +114,8 @@ class AdoFileReader(object):
         line = next(self.lines)
         while line.startswith('---'):
             line = next(self.lines)
+        if line == 'END FILE GRIDFL':
+            raise StopIteration
         name = (line
             .replace('*SET*', '')
             .replace('*TEXT*', '')
@@ -158,4 +176,77 @@ class AdoFileReader(object):
         assert (line == 'ENDSET') or (line == 'ENDTEXT'), \
             'error reading file {f.name:}'.format(
             f=self.filepath,
+            )
+
+    def write(self, blocks=None, records=None, **blockspec):
+        blocks = blocks or []
+        for record in records:
+            block = AdoBlock.from_record(record)
+            blocks.append(block)
+
+        for block in blocks:
+            self.write_block(**blockspec)
+
+    def write_block(self, block, ncols=6, width=14, precision=6):
+        # get dtype
+        if block.blocktype is BlockType.SCALAR:
+            if isinstance(block.values, str):
+                dtype = np.str
+
+        # write name
+        self._write_name(block.name)
+
+        # write block type
+        self._write_blocktype(self, block.blocktype)
+
+        # write values
+        if block.blocktype is BlockType.SCALAR:
+            self._write_scalar(block.values)
+        elif block.blocktype is BlockType.ARRAY:
+            self._write_array(block.values)
+        else:
+            raise ValueError('block type {blocktype:d} not implemented'.format(
+                blocktype=blocktype.value,
+                ))
+
+        # write endset
+        self._write_endset(dtype)
+
+    def _write_name(self, name, dtype):
+        if dtype == np.str:
+            prefix = 'TEXT'
+        else:
+            prefix = 'SET'
+        self.f.write('*{prefix:}*{name:}'.format(
+            prefix=prefix,
+            name=name.upper(),
+                ) + '\n'
+            )
+
+    def _write_blocktype(self, blocktype):
+        self.f.write('{blocktype:d}'.format(
+            blocktype=blocktype.value,
+                ) + '\n'
+            )
+
+    def _write_scalar(self, value, dtype):
+        if dtype == np.float:
+            floatfmt = '{{width.'
+            valuestr = '{:}'.format(value)
+        self.f.write('{value:}'.format(
+            value=value,
+                ) + '\n'
+            )
+
+    def _write_array(self, values):
+        pass
+
+    def _write_endset(self, dtype):
+        if dtype == np.str:
+            suffix = 'TEXT'
+        else:
+            suffix = 'SET'
+        self.f.write('END{suffix:}'.format(
+            suffix=suffix,
+                ) + '\n'
             )
