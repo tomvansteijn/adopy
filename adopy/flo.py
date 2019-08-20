@@ -44,6 +44,23 @@ class TransientAdoBlock(AdoBlock):
             values=block.values,
             )
 
+    @classmethod
+    def from_record(cls, record):
+        return cls(
+            name=record['name'],
+            time=record['time'],
+            blocktype=BlockType(record['blocktype']),
+            values=record['values'],
+            )
+
+    def to_record(self):
+        return {
+            'name': self.name,
+            'time': self.time,
+            'blocktype': self.blocktype.value,
+            'values': self.values,
+            }
+
 
 class TransientFloFileReader(AdoFileReader):
     def read_block(self):
