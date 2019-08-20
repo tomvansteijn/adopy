@@ -4,6 +4,8 @@
 
 from adopy.ado import AdoFileReader
 
+import numpy as np
+
 import logging
 import os
 
@@ -27,6 +29,7 @@ TEO_NAMES = {
     'RIVERNUMBER': 'rivernumber',
     'RIVERID': 'riverid',
     }
+
 
 class TeoGrid(object):
     def __init__(self,
@@ -64,6 +67,86 @@ class TeoGrid(object):
         self.rivernumber = rivernumber
         self.riverid = riverid
 
+    @classmethod
+    def from_file(cls, 
+        header,
+        x_nodes,
+        y_nodes,
+        elem1,
+        elem2,
+        elem3,
+        elem_area,
+        nia,
+        source_nodes,
+        num_nodes_river,
+        river_nodes,
+        boundary_nodes,
+        boundary_segments,
+        sourcenumber,
+        rivernumber,
+        riverid,
+        ):
+        '''
+        Create class instance from teo file. Note that indices are converted to zero-based indexing.
+        Source and River numbers are unchanged!
+        '''
+        return cls(
+            header,
+            x_nodes,
+            y_nodes,
+            elem1 - 1,
+            elem2 - 1,
+            elem3 - 1,
+            elem_area,
+            nia,
+            source_nodes - 1,
+            num_nodes_river,
+            river_nodes - 1,
+            boundary_nodes - 1,
+            boundary_segments,
+            sourcenumber,
+            rivernumber,
+            riverid,
+            )
+
+    def get_center_coords(self):
+        x1 = self.x_nodes[self.elem1]
+        x2 = self.x_nodes[self.elem2]
+        x3 = self.x_nodes[self.elem3]
+        y1 = self.y_nodes[self.elem1]
+        y2 = self.y_nodes[self.elem2]
+        y3 = self.y_nodes[self.elem3]
+
+        xc = np.mean([x1, x2, x3], axis=0)
+        yc = np.mean([y1, y2, y3], axis=0)
+
+        center_coords = np.stack([xc, yc], axis=-1)
+        return center_coords
+
+    def get_node_coords(self, nodenumber=None):
+        node_coords = np.stack([self.x_nodes, self.y_nodes], axis=-1)
+        if nodenumber is None:
+            return node_coords
+        else:
+            return node_coords[nodenumber, :]
+
+    def get_elements_for_node(self, nodenumber):
+        is_elem = (
+            (nodenumber == self.elem1) |
+            (nodenumber == self.elem2) |
+            (nodenumber == self.elem3)
+            )
+        is_elem, = np.where(is_elem)
+        return is_elem
+
+    def get_nodes_for_element(self, elementnumber):
+        yield self.elem1[elementnumber]
+        yield self.elem2[elementnumber]
+        yield self.elem3[elementnumber]
+
+    def is_boundary_node(self, nodenumber):
+        return nodenumber in self.boundary_nodes
+
 
 class TeoFileReader(AdoFileReader):
     def read(self):
@@ -74,7 +157,7 @@ class TeoFileReader(AdoFileReader):
         for block in blocks:
             key = TEO_NAMES[block.name]
             grid_kwargs[key] = block.values    
-        return TeoGrid(header, **grid_kwargs)
+        return TeoGrid.from_file(header, **grid_kwargs)
 
 
     def _read_header(self):
