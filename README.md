@@ -17,4 +17,19 @@ To Do:
 The following projects are similar:
 * [triwaco_flo](https://gitlab.com/rhdhv/water/groundwater/io/tree/master/triwaco_flo)
 * [triwaco_tro](https://gitlab.com/rhdhv/water/groundwater/io/tree/master/triwaco_tro)
-* [Jonne's adopy](https://gitlab.com/rhdhv/water/groundwater/io/tree/master/adopy)
+
+## Example usage
+Reading an ado file
+```python
+with adopy.open(r'data\RL1.ado') as src:
+    blocks = [bl for bl in src.read()]
+    rl1 = blocks[0]
+    
+print('block name:  ', rl1.name)
+print('max value: ', rl1.values.max())
+```
+Output
+```
+block name:   RL1
+max value:  33.31
+```
