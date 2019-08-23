@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # Tom van Steijn, Royal HaskoningDHV
 
-from adopy.ado import AdoFileReader
+from adopy.ado import AdoFile
 
 import numpy as np
 
@@ -148,17 +148,17 @@ class TeoGrid(object):
         return nodenumber in self.boundary_nodes
 
 
-class TeoFileReader(AdoFileReader):
+class TeoFile(AdoFile):
     def read(self):
+        self.reset_file()
         header = self._read_header()
-        blocks = super().read()
+        blocks = super().read_blocks()
 
         grid_kwargs = {}
         for block in blocks:
             key = TEO_NAMES[block.name]
             grid_kwargs[key] = block.values    
         return TeoGrid.from_file(header, **grid_kwargs)
-
 
     def _read_header(self):
         # skip first line
@@ -175,3 +175,6 @@ class TeoFileReader(AdoFileReader):
             line = next(self.lines)
 
         return header
+
+    def write(self):
+        raise NotImplementedError('writing teo files not implemented')

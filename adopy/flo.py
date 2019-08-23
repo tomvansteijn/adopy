@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # Tom van Steijn, Royal HaskoningDHV
 
-from adopy.ado import AdoBlock, AdoFileReader
+from adopy.ado import AdoBlock, AdoFile
 
 import logging
 import os
@@ -10,10 +10,11 @@ import os
 log = logging.getLogger(os.path.basename(__file__))
 
 
-class SteadyFloFileReader(AdoFileReader):
+class SteadyFloFile(AdoFile):
     def read(self, clean_names=True):
+        self.reset_file()
         self._skip_header()
-        blocks = super().read()        
+        blocks = super().read_blocks()        
         for block in blocks:
             if clean_names:
                 block.name = (block.name
@@ -28,6 +29,14 @@ class SteadyFloFileReader(AdoFileReader):
     def _skip_header(self, header=5):
         for i in range(header):
             line = next(self.lines)
+
+    def write(self, blocks=None, records=None, **blockformat):
+        self._write_header()
+        super().write(blocks, records, **blockformat)
+
+    def _write_header(self, header=5):
+        for i in range(header):
+            self._write_separator()
 
 
 class TransientAdoBlock(AdoBlock):
@@ -61,8 +70,19 @@ class TransientAdoBlock(AdoBlock):
             'values': self.values,
             }
 
+    def to_base(self):
+        block_name = '{name:},TIME:{time:10.4f}'.format(
+            name=self.name,
+            time=self.time,
+            )
+        return AdoBlock(
+            name=name,
+            blocktype=self.blocktype,
+            values=self.values,
+            )
 
-class TransientFloFileReader(AdoFileReader):
+
+class TransientFloFile(AdoFile):
     def read_block(self):
         block = super().read_block()
 
@@ -72,3 +92,13 @@ class TransientFloFileReader(AdoFileReader):
 
         # return transient ado block
         return TransientAdoBlock.from_block(block, time)
+
+    def write(self, blocks=None, records=None, **blockformat):
+        records = records or []
+        blocks = blocks or []
+        for record in records:
+            block = TransientAdoBlock.from_record(record)
+            blocks.append(block)
+
+        for block in blocks:
+            self.write_block(block.to_base(), **blockformat)

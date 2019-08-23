@@ -12,7 +12,7 @@ import re
 
 log = logging.getLogger(os.path.basename(__file__))
 
-NUMBERFORMATPATTERN = (
+FORMATTEXTPATTERN = (
     r'\((?P<ncols>\d+)(?P<atype>[AEI])(?P<width>\d+).?(?P<precision>\d+)?\)'
     )
 
@@ -44,7 +44,7 @@ class AdoBlock(object):
             }
 
 
-class AdoFileReader(object):
+class AdoFile(object):
     def __init__(self, filepath, mode='r'):
         self.filepath = Path(filepath)
         self.f = self.open(mode=mode)
@@ -73,10 +73,16 @@ class AdoFileReader(object):
     def close(self):
         self.f.close()
 
+    def reset_file(self):
+        self.f.seek(0)
+
     def read(self):
+        self.reset_file()
+        yield from self.read_blocks()
+
+    def read_blocks(self):
         if self.mode == 'w':
             raise ValueError('File not readable in write mode')
-
         while True:
             try:
                 block = self.read_block()
@@ -129,17 +135,17 @@ class AdoFileReader(object):
 
     def _read_scalar(self):
         line = next(self.lines)
-        value = np.float(line)  # scalar is always float
+        value = np.array(line)
         return value
 
     def _read_array(self):
         # read array header
         line = next(self.lines)
-        nvalues, numberformat = line.split()
+        nvalues, formattext = line.split()
         nvalues = int(nvalues)
 
         # parse number format        
-        m = re.search(NUMBERFORMATPATTERN, numberformat)
+        m = re.search(FORMATTEXTPATTERN, formattext)
         ncols = int(m.group('ncols'))
         width = int(m.group('width'))
         atype = m.group('atype')
@@ -178,32 +184,37 @@ class AdoFileReader(object):
             f=self.filepath,
             )
 
-    def write(self, blocks=None, records=None, **blockspec):
+    def write(self, blocks=None, records=None, **blockformat):        
+        records = records or []
         blocks = blocks or []
         for record in records:
             block = AdoBlock.from_record(record)
             blocks.append(block)
 
         for block in blocks:
-            self.write_block(**blockspec)
+            self.write_block(block, **blockformat)
 
     def write_block(self, block, ncols=6, width=14, precision=6):
         # get dtype
-        if block.blocktype is BlockType.SCALAR:
-            if isinstance(block.values, str):
-                dtype = np.str
+        try:
+            dtype = block.values.dtype
+        except AttributeError:
+            dtype = np.array(block.values).dtype
+
+        # write separator
+        self._write_separator()
 
         # write name
-        self._write_name(block.name)
+        self._write_name(block.name, dtype)
 
         # write block type
-        self._write_blocktype(self, block.blocktype)
+        self._write_blocktype(block.blocktype)
 
         # write values
         if block.blocktype is BlockType.SCALAR:
-            self._write_scalar(block.values)
+            self._write_scalar(block.values, dtype)
         elif block.blocktype is BlockType.ARRAY:
-            self._write_array(block.values)
+            self._write_array(block.values, dtype, ncols, width, precision)
         else:
             raise ValueError('block type {blocktype:d} not implemented'.format(
                 blocktype=blocktype.value,
@@ -212,8 +223,11 @@ class AdoFileReader(object):
         # write endset
         self._write_endset(dtype)
 
+    def _write_separator(self):
+        self.f.write(72*'-' + '\n')
+
     def _write_name(self, name, dtype):
-        if dtype == np.str:
+        if dtype.type is np.str_:
             prefix = 'TEXT'
         else:
             prefix = 'SET'
@@ -231,18 +245,65 @@ class AdoFileReader(object):
 
     def _write_scalar(self, value, dtype):
         if dtype == np.float:
-            floatfmt = '{{width.'
-            valuestr = '{:}'.format(value)
-        self.f.write('{value:}'.format(
-            value=value,
+            valuetext = '{value:9.6f}'.format(value=value)
+        elif dtype == np.int:
+            valuetext = '{value:d}'.format(value=value)
+        else:
+            valuetext = '{value:}'.format(value=value)
+        self.f.write('{valuetext:}'.format(
+            valuetext=valuetext,
                 ) + '\n'
             )
 
-    def _write_array(self, values):
-        pass
+    def _write_array(self, values, dtype, ncols, width, precision=6):        
+        # write array header
+        nvalues = values.size
+        if dtype == np.float:
+            formattext = '({ncols:d}E{width:d}.{precision:d})'.format(
+                ncols=ncols,
+                width=width,
+                precision=precision,
+                )
+            itemfmt = '{{:+{width:d}.{precision:d}E}}'.format(
+                width=width,
+                precision=precision,
+                )
+        elif dtype == np.int:
+            formattext = '({ncols:d}I{width:d})'.format(
+                ncols=ncols,
+                width=width,
+                )
+            itemfmt = '{{:{width:d}d}}'.format(
+                width=width,
+                )
+        else:
+            formattext = '({ncols:d}A{width:d})'.format(
+                ncols=ncols,
+                width=width,
+                )
+            itemfmt = '{{:<{width:d}}}'.format(
+                width=width,
+                )
+        self.f.write('{nvalues:<10d}{formattext:}'.format(
+            nvalues=nvalues,
+            formattext=formattext,
+                ) + '\n'
+            )
+
+        # write array values
+        values = np.ravel(values)
+        nlines = (nvalues + ncols - 1) // ncols
+        for iline in range(nlines):
+            if (iline + 1) < nlines:
+                count = ncols
+            else:
+                count = nvalues % ncols
+            row = values[iline*ncols:iline*ncols + count]
+            line = (itemfmt*count).format(*row)
+            self.f.write(line + '\n')
 
     def _write_endset(self, dtype):
-        if dtype == np.str:
+        if dtype.type is np.str_:
             suffix = 'TEXT'
         else:
             suffix = 'SET'
