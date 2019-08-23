@@ -28,6 +28,12 @@ class AdoBlock(object):
         self.blocktype = blocktype
         self.values = values
 
+    def __repr__(self):
+        return ('{s.__class__.__name__:}('
+            'name={s.name:}, '
+            'type={s.blocktype.name:}'
+            ')').format(s=self)
+
     @classmethod
     def from_record(cls, record):
         return cls(
@@ -134,8 +140,17 @@ class AdoFile(object):
         return blocktype
 
     def _read_scalar(self):
-        line = next(self.lines)
-        value = np.array(line)
+        line = next(self.lines)        
+
+        # try to cast as int, then float, otherwise as string array
+        try:
+            value = np.array(line, dtype=np.int)
+        except ValueError:
+            try:
+                value = np.array(line, dtype=np.float)
+            except:
+                value = np.array(line)
+                
         return value
 
     def _read_array(self):
