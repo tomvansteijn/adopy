@@ -12,7 +12,7 @@ import re
 
 log = logging.getLogger(os.path.basename(__file__))
 
-FORMATTEXTPATTERN = (
+ARRAYFORMAT = (
     r'\((?P<ncols>\d+)(?P<atype>[AEI])(?P<width>\d+).?(?P<precision>\d+)?\)'
     )
 
@@ -156,11 +156,13 @@ class AdoFile(object):
     def _read_array(self):
         # read array header
         line = next(self.lines)
-        nvalues, formattext = line.split()
+        nvalues, arrayformat = line.split()
         nvalues = int(nvalues)
 
         # parse number format        
-        m = re.search(FORMATTEXTPATTERN, formattext)
+        m = re.search(ARRAYFORMAT, arrayformat)
+        if m is None:
+            raise ValueError('error reading array format')
         ncols = int(m.group('ncols'))
         width = int(m.group('width'))
         atype = m.group('atype')
@@ -177,18 +179,20 @@ class AdoFile(object):
 
         # read array values
         nlines = (nvalues + ncols - 1) // ncols
+        remainder = nvalues % ncols
         rows = []
         for iline in range(nlines):
             line = next(self.lines)
-            if (iline + 1) < nlines:
+            if ((iline + 1) < nlines) or (remainder == 0):
                 count = ncols
             else:
-                count = nvalues % ncols
-            row = np.array(
-                [line[ic * width: (ic + 1) * width] for ic in range(count)],
-                dtype=dtype,
-                )
-            rows.append(row)
+                count = remainder
+            if count > 0:
+                row = np.array(
+                    [line[ic * width: (ic + 1) * width] for ic in range(count)],
+                    dtype=dtype,
+                    )
+                rows.append(row)
         values = np.concatenate(rows, axis=0)
         return values
 
@@ -308,14 +312,16 @@ class AdoFile(object):
         # write array values
         values = np.ravel(values)
         nlines = (nvalues + ncols - 1) // ncols
+        remainder = nvalues % ncols
         for iline in range(nlines):
-            if (iline + 1) < nlines:
+            if ((iline + 1) < nlines) or (remainder == 0):
                 count = ncols
             else:
-                count = nvalues % ncols
-            row = values[iline*ncols:iline*ncols + count]
-            line = (itemfmt*count).format(*row)
-            self.f.write(line + '\n')
+                count = remainder
+            if count > 0:
+                row = values[iline*ncols:iline*ncols + count]
+                line = (itemfmt*count).format(*row)
+                self.f.write(line + '\n')
 
     def _write_endset(self, dtype):
         if dtype.type is np.str_:
