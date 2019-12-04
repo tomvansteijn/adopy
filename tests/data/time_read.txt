@@ -1,0 +1,2 @@
+1000000 loops, best of 3: 0.294 usec per loop
+1000000 loops, best of 3: 0.334 usec per loop

@@ -82,16 +82,16 @@ class AdoFile(object):
     def reset_file(self):
         self.f.seek(0)
 
-    def read(self):
+    def read(self, use_loop=False):
         self.reset_file()
-        yield from self.read_blocks()
+        yield from self.read_blocks(use_loop=use_loop)
 
-    def read_blocks(self):
+    def read_blocks(self, use_loop=False):
         if self.mode == 'w':
             raise ValueError('File not readable in write mode')
         while True:
             try:
-                block = self.read_block()
+                block = self.read_block(use_loop=use_loop)
                 yield block
             except StopIteration:
                 break
@@ -99,7 +99,7 @@ class AdoFile(object):
     def as_dict(self):
         return {bl.name: bl for bl in self.read()}
 
-    def read_block(self):
+    def read_block(self, use_loop=False):
         # parse block name
         name = self._read_name()
 
@@ -110,7 +110,7 @@ class AdoFile(object):
         if blocktype is BlockType.SCALAR:
             values = self._read_scalar()            
         elif blocktype is BlockType.ARRAY:
-            values = self._read_array()
+            values = self._read_array(use_loop=use_loop)
         else:
             raise ValueError('block type {blocktype:d} not implemented'.format(
                 blocktype=blocktype.value,
@@ -153,7 +153,7 @@ class AdoFile(object):
                 
         return value
 
-    def _read_array(self):
+    def _read_array(self, use_loop=False):
         # read array header
         line = next(self.lines)
         nvalues, arrayformat = line.split()
@@ -178,22 +178,43 @@ class AdoFile(object):
                 ))
 
         # read array values
-        nlines = (nvalues + ncols - 1) // ncols
-        remainder = nvalues % ncols
-        rows = []
-        for iline in range(nlines):
-            line = next(self.lines)
-            if ((iline + 1) < nlines) or (remainder == 0):
-                count = ncols
-            else:
-                count = remainder
-            if count > 0:
-                row = np.array(
-                    [line[ic * width: (ic + 1) * width] for ic in range(count)],
+        nrows = nvalues // ncols
+        nremainder = nvalues % ncols
+        if use_loop:
+            rows = []
+            for irow in range(nrows + 1):
+                line = next(self.lines)
+                if (irow < nrows) or (nremainder == 0):
+                    count = ncols
+                else:
+                    count = nremainder
+                if count > 0:
+                    row = np.array(
+                        [line[ic * width: (ic + 1) * width]
+                        for ic in range(count)],
+                        dtype=dtype,
+                        )
+                    rows.append(row)
+            values = np.concatenate(rows, axis=0)
+        else:
+            values = []
+            if nrows > 0:
+                delimiter = [width,] * ncols
+                rect_array = np.genfromtxt(self.f,
                     dtype=dtype,
+                    delimiter=delimiter,
+                    max_rows=nrows,
                     )
-                rows.append(row)
-        values = np.concatenate(rows, axis=0)
+                values.append(rect_array.flatten())
+            if nremainder > 0:
+                delimiter = [width,] * nremainder
+                remainder = np.genfromtxt(self.f,
+                    dtype=dtype,
+                    delimiter=delimiter,
+                    max_rows=1,
+                    )
+                values.append(remainder.flatten())
+            values = np.concatenate(values, axis=0)
         return values
 
     def _read_endset(self):
@@ -203,7 +224,7 @@ class AdoFile(object):
             f=self.filepath,
             )
 
-    def write(self, blocks=None, records=None, **blockformat):        
+    def write(self, blocks=None, records=None, use_loop=False, **blockformat):        
         records = records or []
         blocks = blocks or []
         for record in records:
@@ -211,9 +232,9 @@ class AdoFile(object):
             blocks.append(block)
 
         for block in blocks:
-            self.write_block(block, **blockformat)
+            self.write_block(block, use_loop=use_loop, **blockformat)
 
-    def write_block(self, block, ncols=6, width=14, precision=6):
+    def write_block(self, block, ncols=6, width=14, precision=6, use_loop=False):
         # get dtype
         try:
             dtype = block.values.dtype
@@ -233,7 +254,9 @@ class AdoFile(object):
         if block.blocktype is BlockType.SCALAR:
             self._write_scalar(block.values, dtype)
         elif block.blocktype is BlockType.ARRAY:
-            self._write_array(block.values, dtype, ncols, width, precision)
+            self._write_array(block.values,
+                dtype, ncols, width, precision, use_loop,
+                )
         else:
             raise ValueError('block type {blocktype:d} not implemented'.format(
                 blocktype=blocktype.value,
@@ -274,7 +297,10 @@ class AdoFile(object):
                 ) + '\n'
             )
 
-    def _write_array(self, values, dtype, ncols, width, precision=6):        
+    def _write_array(self, values, dtype,
+        ncols, width, precision=6,
+        use_loop=False,
+        ):        
         # write array header
         nvalues = values.size
         if dtype == np.float:
@@ -283,24 +309,14 @@ class AdoFile(object):
                 width=width,
                 precision=precision,
                 )
-            itemfmt = '{{:+{width:d}.{precision:d}E}}'.format(
-                width=width,
-                precision=precision,
-                )
         elif dtype == np.int:
             formattext = '({ncols:d}I{width:d})'.format(
                 ncols=ncols,
                 width=width,
                 )
-            itemfmt = '{{:{width:d}d}}'.format(
-                width=width,
-                )
         else:
             formattext = '({ncols:d}A{width:d})'.format(
                 ncols=ncols,
-                width=width,
-                )
-            itemfmt = '{{:<{width:d}}}'.format(
                 width=width,
                 )
         self.f.write('{nvalues:<10d}{formattext:}'.format(
@@ -311,17 +327,58 @@ class AdoFile(object):
 
         # write array values
         values = np.ravel(values)
-        nlines = (nvalues + ncols - 1) // ncols
-        remainder = nvalues % ncols
-        for iline in range(nlines):
-            if ((iline + 1) < nlines) or (remainder == 0):
-                count = ncols
+        nrows = nvalues // ncols
+        nremainder = nvalues % ncols
+        if use_loop:
+            if dtype == np.float:
+                fmt = '{{:+{width:d}.{precision:d}E}}'.format(
+                    width=width,
+                    precision=precision,
+                    )
+            elif dtype == np.int:
+                fmt = '{{:{width:d}d}}'.format(
+                    width=width,
+                    )
             else:
-                count = remainder
-            if count > 0:
-                row = values[iline*ncols:iline*ncols + count]
-                line = (itemfmt*count).format(*row)
-                self.f.write(line + '\n')
+                fmt = '{{:<{width:d}}}'.format(
+                    width=width,
+                    )
+            for irow in range(nrows + 1):
+                if (irow < nrows) or (nremainder == 0):
+                    count = ncols
+                else:
+                    count = nremainder
+                if count > 0:
+                    row = values[irow*ncols:irow*ncols + count]
+                    line = (fmt*count).format(*row)
+                    self.f.write(line + '\n')
+        else:
+            if dtype == np.float:
+                fmt = '%+{width:d}.{precision:d}E'.format(
+                    width=width,
+                    precision=precision,
+                    )
+            elif dtype == np.int:
+                fmt = '%{width:d}d'.format(
+                    width=width,
+                    )
+            else:
+                fmt = '%{width:d}s'.format(
+                    width=width,
+                    )
+            if nrows > 0:
+                rect_array = values[:nrows*ncols].reshape((nrows, ncols))
+                np.savetxt(self.f, rect_array,
+                    delimiter='',
+                    fmt=fmt,
+                    )
+            remainder = values[nrows*ncols:].reshape((1, nremainder))
+            np.savetxt(self.f, remainder,
+                delimiter='',
+                fmt=fmt,
+                )         
+
+
 
     def _write_endset(self, dtype):
         if dtype.type is np.str_:

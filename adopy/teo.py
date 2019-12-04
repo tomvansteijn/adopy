@@ -109,6 +109,20 @@ class TeoGrid(object):
             riverid,
             )
 
+    def get_midpoints(self):
+        x1 = self.x_nodes[self.elem1]
+        x2 = self.x_nodes[self.elem2]
+        x3 = self.x_nodes[self.elem3]
+        y1 = self.y_nodes[self.elem1]
+        y2 = self.y_nodes[self.elem2]
+        y3 = self.y_nodes[self.elem3]
+        return (
+            (np.mean([x1, x2], axis=0), np.mean([y1, y2], axis=0)),
+            (np.mean([x1, x2], axis=0), np.mean([y1, y2], axis=0)),
+            (np.mean([x1, x2], axis=0), np.mean([y1, y2], axis=0)),
+            )
+
+
     def get_center_coords(self):
         x1 = self.x_nodes[self.elem1]
         x2 = self.x_nodes[self.elem2]
@@ -149,10 +163,10 @@ class TeoGrid(object):
 
 
 class TeoFile(AdoFile):
-    def read(self):
+    def read(self, use_loop=False):
         self.reset_file()
         header = self._read_header()
-        blocks = super().read_blocks()
+        blocks = super().read_blocks(use_loop=use_loop)
 
         grid_kwargs = {}
         for block in blocks:

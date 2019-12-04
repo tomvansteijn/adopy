@@ -38,6 +38,19 @@ class TestAdoFile(object):
         assert block.values.shape == (46274,)
         assert block.values.dtype == np.float
         assert np.isclose(block.values.max(), 33.31)
+        assert np.isclose(block.values[-1], 22.91)
+
+    def test_read_use_loop(self, sourcefile):
+        with adopy.open(sourcefile) as src:
+            blocks = [bl for bl in src.read(use_loop=True)]
+        block = blocks[0]
+        assert len(blocks) == 1
+        assert block.name == 'RL1'
+        assert block.blocktype.value == 2
+        assert block.values.shape == (46274,)
+        assert block.values.dtype == np.float
+        assert np.isclose(block.values.max(), 33.31)
+        assert np.isclose(block.values[-1], 22.91)
 
     def test_write_array(self):
         datadir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')

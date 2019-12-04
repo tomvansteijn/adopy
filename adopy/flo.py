@@ -11,10 +11,10 @@ log = logging.getLogger(os.path.basename(__file__))
 
 
 class SteadyFloFile(AdoFile):
-    def read(self, clean_names=True):
+    def read(self, clean_names=True, use_loop=False):
         self.reset_file()
         self._skip_header()
-        blocks = super().read_blocks()        
+        blocks = super().read_blocks(use_loop=False)        
         for block in blocks:
             if clean_names:
                 block.name = (block.name
@@ -30,9 +30,9 @@ class SteadyFloFile(AdoFile):
         for i in range(header):
             line = next(self.lines)
 
-    def write(self, blocks=None, records=None, **blockformat):
+    def write(self, blocks=None, records=None, use_loop=False, **blockformat):
         self._write_header()
-        super().write(blocks, records, **blockformat)
+        super().write(blocks, records, use_loop=use_loop, **blockformat)
 
     def _write_header(self, header=5):
         for i in range(header):
@@ -83,8 +83,8 @@ class TransientAdoBlock(AdoBlock):
 
 
 class TransientFloFile(AdoFile):
-    def read_block(self):
-        block = super().read_block()
+    def read_block(self, use_loop=False):
+        block = super().read_block(use_loop=use_loop)
 
         # extract time from block name
         block.name, timestr = block.name.split(',')
@@ -93,7 +93,7 @@ class TransientFloFile(AdoFile):
         # return transient ado block
         return TransientAdoBlock.from_block(block, time)
 
-    def write(self, blocks=None, records=None, **blockformat):
+    def write(self, blocks=None, records=None, use_loop=False, **blockformat):
         records = records or []
         blocks = blocks or []
         for record in records:
@@ -101,4 +101,4 @@ class TransientFloFile(AdoFile):
             blocks.append(block)
 
         for block in blocks:
-            self.write_block(block.to_base(), **blockformat)
+            self.write_block(block.to_base(), use_loop=use_loop, **blockformat)
